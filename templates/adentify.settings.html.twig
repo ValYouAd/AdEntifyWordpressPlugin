@@ -135,7 +135,6 @@
                                         value="{% if(productProvidersKey[productProvider ~ 'ProviderKeyVal']) %}{{ productProvidersKey[productProvider ~ 'ProviderKeyVal'] }}{% endif %}"/>
                                     {% set productProvider = productProvider|capitalize %}
                                     {% trans %}{{ productProvider }} key (optional){% endtrans %}
-                                    {#{{ productProvider|capitalize }} key (optional)#}
                                 </label>
                                 <br>
                             {% endif %}
