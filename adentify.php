@@ -3,7 +3,7 @@
  * Plugin Name: AdEntify
  * Plugin URI: http://wordpress.adentify.com
  * Description: A brief description of the Plugin.
- * Version: 1.0.0
+ * Version: 1.0.10
  * Author: ValYouAd
  * Author URI: http://www.valyouad.com
  * License: GPL2
@@ -43,14 +43,13 @@ define( 'ADENTIFY__PLUGIN_SETTINGS', serialize(array(
 define( 'ADENTIFY_PLUGIN_SETTINGS_PAGE_NAME', 'adentify_plugin_submenu');
 define( 'ADENTIFY_REDIRECT_URI', admin_url(sprintf('options-general.php?page=%s', ADENTIFY_PLUGIN_SETTINGS_PAGE_NAME)) );
 define( 'ADENTIFY_ADMIN_URL', admin_url('admin-ajax.php'));
-define( 'ADENTIFY_AJAX_URL', plugin_dir_url( __FILE__ ) . 'ajax.php');
 define( 'ADENTIFY_API_CLIENT_NAME', sprintf('plugin_wordpress_%s', $_SERVER['HTTP_HOST']));
 define( 'ADENTIFY_API_CLIENT_ID_KEY', 'api_client_id');
 define( 'ADENTIFY_API_CLIENT_SECRET_KEY', 'api_client_secret');
 define( 'ADENTIFY_API_ACCESS_TOKEN', 'api_access_token');
 define( 'ADENTIFY_API_REFRESH_TOKEN', 'api_refresh_token');
 define( 'ADENTIFY_API_EXPIRES_TIMESTAMP', 'api_expires_timestamp');
-define( 'PLUGIN_VERSION', '1.0.1');
+define( 'PLUGIN_VERSION', '1.0.10');
 define( 'ADENTIFY_SQL_TABLE_PHOTOS', 'adentify_photos');
 
 require 'vendor/autoload.php';
@@ -70,6 +69,8 @@ setlocale(LC_ALL, get_locale());
 // Specify location of translation tables
 bindtextdomain("adentify", ADENTIFY__PLUGIN_DIR."languages");
 bind_textdomain_codeset('adentify', 'UTF-8');
+
+load_plugin_textdomain('adentify', ADENTIFY__PLUGIN_DIR, 'languages');
 
 // Choose domain
 textdomain("adentify");
@@ -116,13 +117,16 @@ function adentify_plugin_settings() {
 	}
 
     if (isset($_GET['code'])) {
-        APIManager::getInstance()->getAccessTokenWithAuthorizationCode($_GET['code']);
+        $success = APIManager::getInstance()->getAccessTokenWithAuthorizationCode($_GET['code']);
+        if (false === $success) {
+            echo '<div class="error">Impossible to get access token from AdEntify API, please contact us on <a href="https://adentify.com/en/contact">adentify.com/en/contact</a></div>';
+        }
     }
 
     $settings = array();
     $productProvidersId = array();
 
-    //fill the settings array with the user's providers
+    // fill the settings array with the user's providers
     $productProviders = APIManager::getInstance()->getProductProviders();
     if (!empty($productProviders))
     {
@@ -136,31 +140,41 @@ function adentify_plugin_settings() {
     }
 
     //fill the settings array with wordpress options if they are already set
-    foreach(unserialize(ADENTIFY__PLUGIN_SETTINGS) as $key)
+    foreach (unserialize(ADENTIFY__PLUGIN_SETTINGS) as $key)
         $settings[$key.'Val'] = get_option($key);
 
-    if ($_POST) {
-        //update the settings array & the wordpress options
-	    foreach(unserialize(ADENTIFY__PLUGIN_SETTINGS) as $key) {
-            $settings[$key.'Val'] = (isset($_POST[$key])) ? $_POST[$key] : null;
-            update_option($key, (isset($_POST[$key])) ? $_POST[$key] : null);
-            foreach (json_decode($productProviders) as $provider) {
-                $providerKey = $provider->product_providers->provider_key.'ProviderKey';
-                if ($providerKey != 'adentifyProviderKey') {
-                    $settings['productProvidersKey'][$providerKey.'Val'] = (isset($_POST[$providerKey])) ? $_POST[$providerKey] : null;
-                    update_option($providerKey, (isset($_POST[$providerKey])) ? $_POST[$providerKey] : null);
-                    APIManager::getInstance()->putUserProductProvider($productProvidersId[substr($providerKey, 0, strpos($providerKey, 'ProviderKey'))], $_POST[$providerKey]);
+    if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+        if (isset($_POST['syncPhotos'])) {
+            if (APIManager::getInstance()->isAccesTokenValid()) {
+                $photos = APIManager::getInstance()->getPhotos();
+                if ($photos && property_exists($photos, 'data')) {
+                    DBManager::getInstance()->insertPhotos($photos->data);
                 }
             }
+        } else {
+            //update the settings array & the wordpress options
+            foreach(unserialize(ADENTIFY__PLUGIN_SETTINGS) as $key) {
+                $settings[$key.'Val'] = (isset($_POST[$key])) ? $_POST[$key] : null;
+                update_option($key, (isset($_POST[$key])) ? $_POST[$key] : null);
+                foreach (json_decode($productProviders) as $provider) {
+                    $providerKey = $provider->product_providers->provider_key.'ProviderKey';
+                    if ($providerKey != 'adentifyProviderKey') {
+                        $settings['productProvidersKey'][$providerKey.'Val'] = (isset($_POST[$providerKey])) ? $_POST[$providerKey] : null;
+                        update_option($providerKey, (isset($_POST[$providerKey])) ? $_POST[$providerKey] : null);
+                        APIManager::getInstance()->putUserProductProvider($productProvidersId[substr($providerKey, 0, strpos($providerKey, 'ProviderKey'))], $_POST[$providerKey]);
+                    }
+                }
+            }
+
+            echo '<div class="updated"><p><strong>Settings saved.</strong></p></div>';
+
+            wp_localize_script('adentify-admin-js', 'adentifyTagsData', array(
+                'admin_ajax_url' => ADENTIFY_ADMIN_URL,
+                'tag_shape' => get_option(unserialize(ADENTIFY__PLUGIN_SETTINGS)['TAGS_SHAPE']),
+            ));
         }
-
-        echo '<div class="updated"><p><strong>Settings saved.</strong></p></div>';
-
-        wp_localize_script('adentify-admin-js', 'adentifyTagsData', array(
-            'admin_ajax_url' => ADENTIFY_ADMIN_URL,
-            'tag_shape' => get_option(unserialize(ADENTIFY__PLUGIN_SETTINGS)['TAGS_SHAPE']),
-        ));
     }
+
 
     echo Twig::render('adentify.settings.html.twig', $settings);
 }
@@ -174,6 +188,7 @@ function adentify_button($editor_id = 'content') {
         esc_attr__( 'Upload images with AdEntify plugin' ),
         'AdEntify'
     );
+
     echo Twig::render('admin\modals\upload.modal.html.twig', array(
         'photos' => DBManager::getInstance()->getPhotos(),
         'max_upload_size' => $max_upload_size
@@ -385,34 +400,28 @@ function ad_upload() {
     else
         wp_send_json_error("status code: 401 Unauthorized");
 }
-add_action( 'wp_ajax_ad_upload', 'ad_upload' );
 
 function ad_tag() {
     $tag = Tag::loadPost($_POST['tag']);
     if (is_array($tag) && array_key_exists('error', $tag)) {
         throw new Exception('tag error');
-    }
-    else if ($result = APIManager::getInstance()->postTag($tag))
+    } else if ($result = APIManager::getInstance()->postTag($tag))
         echo $result->getBody();
     exit();
 }
-add_action( 'wp_ajax_ad_tag', 'ad_tag' );
 
 function ad_get_photo() {
     @header( 'Content-Type: application/json; charset=' . get_option( 'blog_charset' ) );
     echo APIManager::getInstance()->getPhoto($_GET['photo_id']);
     wp_die();
 }
-add_action( 'wp_ajax_ad_get_photo', 'ad_get_photo' );
 
 function ad_analytics() {
     echo APIManager::getInstance()->postAnalytic($_POST['analytic']);
 }
-add_action( 'wp_ajax_nopriv_ad_analytics', 'ad_analytics');
-//add_action( 'wp_ajax_ad_analytics', 'ad_analytics');
 
 function ad_admin_notice() {
-    if (!APIManager::getInstance()->getAccessToken() && !array_key_exists('code', $_GET))
+    if (!APIManager::getInstance()->isAccesTokenValid() && !array_key_exists('code', $_GET))
         echo Twig::render('admin\notices.html.twig', array(
             'authorization_url' => APIManager::getInstance()->getAuthorizationUrl()
         ));
@@ -423,14 +432,20 @@ function ad_delete_photo() {
     if (APIManager::getInstance()->getAccessToken()) {
         wp_delete_attachment($_GET['wp_photo_id']);
         DBManager::getInstance()->deletePhoto($_GET['wp_photo_id']);
-        print_r(APIManager::getInstance()->deletePhoto($_GET['photo_id']));
     }
 }
-add_action( 'wp_ajax_ad_delete_photo', 'ad_delete_photo' );
 
 function ad_remove_tag() {
     if (APIManager::getInstance()->getAccessToken()) {
         print_r(APIManager::getInstance()->deleteTag($_GET['tag_id']));
     }
 }
+
+
+add_action( 'wp_ajax_ad_upload', 'ad_upload' );
+add_action( 'wp_ajax_ad_tag', 'ad_tag' );
+add_action( 'wp_ajax_ad_get_photo', 'ad_get_photo' );
 add_action( 'wp_ajax_ad_remove_tag', 'ad_remove_tag' );
+add_action( 'wp_ajax_ad_delete_photo', 'ad_delete_photo' );
+add_action( 'wp_ajax_ad_analytics', 'ad_analytics');
+add_action( 'wp_ajax_nopriv_ad_analytics', 'ad_analytics');

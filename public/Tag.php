@@ -90,9 +90,8 @@ class Tag
             if (array_key_exists('product', $postArray['extraData'])) {
                 $brandId = ($brand) ? $brand->id : $postArray['brand'];
                 $response = APIManager::getInstance()->postProduct($postArray['extraData']['product'], $brandId);
-                if ($response) {
+                if ($response)
                     $product = json_decode($response->getBody());
-                }
             }
             if (array_key_exists('person', $postArray['extraData'])) {
                 $response = APIManager::getInstance()->postPerson($postArray['extraData']['person']);
@@ -105,8 +104,10 @@ class Tag
         $tag = new Tag;
         $tag->setType($postArray['type']);
         $tag->setTitle($postArray['title']);
-        $tag->setDescription($postArray['description']);
-        $tag->setLink($postArray['link']);
+        if (array_key_exists('description', $postArray))
+            $tag->setDescription($postArray['description']);
+        if (array_key_exists('link', $postArray))
+            $tag->setLink($postArray['link']);
         $tag->setXPosition($postArray['x_position']);
         $tag->setYPosition($postArray['y_position']);
         $tag->setPhoto($postArray['photo']);
@@ -121,6 +122,7 @@ class Tag
                     $tag->setBrand($brand->id);
                 else if (array_key_exists('brand', $postArray))
                     $tag->setBrand($postArray['brand']);
+
                 if ($tag->getProduct() && $tag->getBrand())
                     return $tag;
                 break;
@@ -134,6 +136,8 @@ class Tag
                 if ($tag->getPerson())
                     return $tag;
                 break;
+            case 'advertising':
+                return $tag;
             default:
                 break;
         }

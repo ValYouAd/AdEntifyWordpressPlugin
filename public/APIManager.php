@@ -190,8 +190,13 @@ class APIManager
             'product' => array()
         );
         foreach($keysToKept as $key) {
-            if (array_key_exists($key, $product))
-                $body['product'][$key] = is_array($product[$key]) ? $product[$key]['id'] : $product[$key];
+            if (array_key_exists($key, $product)){
+                if (is_array($product[$key])) {
+                    if (array_key_exists('id', $product[$key]))
+                        $body['product'][$key] = $product[$key]['id'];
+                } else
+                    $body['product'][$key] = $product[$key];
+            }
         }
 
         $body['product']['brand'] = $brandId;
@@ -240,7 +245,6 @@ class APIManager
     {
         $response = $this->postAction('client', array(
             'client' => array(
-                /*'_token' => $json->csrf_token,*/
                 'name' => ADENTIFY_API_CLIENT_NAME,
                 'displayName' => 'Plugin Wordpress AdEntify',
                 'redirectUris' => array(ADENTIFY_REDIRECT_URI)
@@ -274,6 +278,7 @@ class APIManager
                 update_option(ADENTIFY_API_ACCESS_TOKEN, $json->access_token);
                 update_option(ADENTIFY_API_REFRESH_TOKEN, $json->refresh_token);
                 update_option(ADENTIFY_API_EXPIRES_TIMESTAMP, strtotime(sprintf('+%s second', $json->expires_in)));
+                return true;
             } else
                 return false;
         } else
@@ -285,21 +290,12 @@ class APIManager
      *
      * @return bool|mixed|void
      */
-    public function getAccessToken()
-    {
-        if (!get_option(ADENTIFY_API_ACCESS_TOKEN) || !$this->isAccesTokenValid()) {
-            return false;
-        }
-
-        return get_option(ADENTIFY_API_ACCESS_TOKEN);
+    public function getAccessToken() {
+        return !$this->isAccesTokenValid() ?: get_option(ADENTIFY_API_ACCESS_TOKEN);
     }
 
-    public function isAccesTokenValid()
-    {
-        if (get_option(ADENTIFY_API_EXPIRES_TIMESTAMP) && get_option(ADENTIFY_API_EXPIRES_TIMESTAMP) < time())
-            return false;
-        else
-            return true;
+    public function isAccesTokenValid() {
+        return get_option(ADENTIFY_API_ACCESS_TOKEN) && get_option(ADENTIFY_API_EXPIRES_TIMESTAMP) && get_option(ADENTIFY_API_EXPIRES_TIMESTAMP) > time();
     }
 
     /**
@@ -324,6 +320,17 @@ class APIManager
             'redirect_uri' => ADENTIFY_REDIRECT_URI,
             'response_type' => 'code'
         )));
+    }
+
+    public function getPhotos()
+    {
+        $response = $this->getAction(sprintf('user/current'));
+        $user = json_decode($response);
+        if ($user) {
+            return json_decode($this->getAction(sprintf('users/%s/photos?limit=300', $user->id)));
+        } else {
+            return null;
+        }
     }
 
     private function getAuthorizationHeader()
