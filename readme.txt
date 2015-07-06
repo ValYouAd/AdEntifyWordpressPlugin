@@ -76,3 +76,5 @@ For more information visit business.adentify.com or email us at contact@adentify
 * Fix analytics when users are logged
 = 1.0.9 =
 * Several fixes
+= 1.0.10 =
+* Add support of Zanox and Tradedoubler
