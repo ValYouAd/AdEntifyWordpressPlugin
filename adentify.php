@@ -119,7 +119,7 @@ function adentify_plugin_settings() {
     if (isset($_GET['code'])) {
         $success = APIManager::getInstance()->getAccessTokenWithAuthorizationCode($_GET['code']);
         if (false === $success) {
-            echo '<div class="error">Impossible to get access token from AdEntify API, please contact us on <a href="https://adentify.com/en/contact">adentify.com/en/contact</a></div>';
+            echo '<div class="error">Can\'t access token from AdEntify API, please contact us on <a href="https://adentify.com/en/contact">adentify.com/en/contact</a></div>';
         }
     }
 
